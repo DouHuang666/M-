@@ -616,14 +616,24 @@ def render_top_bar():
         spacer, btn_col = st.columns([1, 1])
         with btn_col:
             with st.popover("智能助手", use_container_width=True):
+                # ------------------ 优先从 secrets 读取 API Key ------------------
+                if st.session_state.deepseek_api_key is None:
+                    try:
+                        secret_key = st.secrets.get("DEEPSEEK_API_KEY")
+                        if secret_key and isinstance(secret_key, str) and secret_key.startswith("sk-"):
+                            st.session_state.deepseek_api_key = secret_key
+                    except Exception:
+                        pass
+
                 if st.session_state.deepseek_api_key is None:
                     st.markdown("### <i class='fas fa-key'></i> 首次使用需配置 DeepSeek API Key", unsafe_allow_html=True)
                     st.caption("请填入您的 DeepSeek API Key（可从 platform.deepseek.com 获取）")
+                    st.caption("💡 提示：在 Streamlit Cloud 上，您可以在「Settings → Secrets」中永久设置 `DEEPSEEK_API_KEY`，避免每次刷新都重新输入。")
                     api_key_input = st.text_input("API Key", type="password", key="api_key_input")
                     if st.button("保存 Key", key="save_api_key"):
                         if api_key_input.strip():
                             st.session_state.deepseek_api_key = api_key_input.strip()
-                            st.success("Key 已保存，现在可以开始对话！")
+                            st.success("Key 已保存（仅本次会话有效，刷新页面后需重新输入，除非你在 Secrets 中配置）")
                             st.rerun()
                         else:
                             st.error("请输入有效的 API Key")
