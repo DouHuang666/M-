@@ -368,14 +368,21 @@ def execute_tool(tool_name, arguments, session_state):
 
 # ======================== DeepSeek API 调用 ========================
 def call_deepseek_with_tools(messages, session_state):
+    # 优先从 session_state 获取 API Key
     api_key = session_state.get("deepseek_api_key")
+    # 如果 session_state 中没有，尝试从 st.secrets 读取（Streamlit Cloud 部署）
     if not api_key:
         try:
-            api_key = st.secrets.get("DEEPSEEK_API_KEY")
-        except:
-            api_key = None
+            import streamlit as st
+            secret_key = st.secrets.get("DEEPSEEK_API_KEY")
+            if secret_key and isinstance(secret_key, str) and secret_key.startswith("sk-"):
+                api_key = secret_key
+                # 可选：同时保存到 session_state，避免重复读取 secrets
+                session_state.deepseek_api_key = api_key
+        except Exception:
+            pass
     if not api_key:
-        return "❌ 未配置 DeepSeek API Key。请点击右上角智能助手，在弹出的窗口中输入您的 API Key。"
+        return "❌ 未配置 DeepSeek API Key。请点击右上角智能助手，在弹出的窗口中输入您的 API Key。或者在 Streamlit Cloud 的 Secrets 中设置 DEEPSEEK_API_KEY。"
 
     url = "https://api.deepseek.com/v1/chat/completions"
     headers = {
