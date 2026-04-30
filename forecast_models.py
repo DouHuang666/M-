@@ -214,7 +214,7 @@ def rolling_multi_step_backtest(history, horizon, window=24, sku_class=None):
     model_dict['加权移动平均法'] = _predict_weighted
     model_dict['二次指数平滑法'] = _predict_holt
     if sku_class not in ['AX', 'AY', 'BX']:
-        model_dict['ARIMA(自预测)'] = _predict_arima
+        model_dict['ARIMA'] = _predict_arima
         model_dict['Holt-Winters乘法'] = _predict_hw_mul
         model_dict['Holt-Winters加法'] = _predict_hw_add
 
@@ -308,8 +308,8 @@ def select_best_model(sku_combined_class, history, horizon):
                 preds, order = arima_forecast(train, len(test))
                 rmse = np.sqrt(np.mean((np.array(preds) - np.array(test))**2))
                 mape = calculate_mape(test, preds)
-                candidates['ARIMA(自预测)'] = {'preds': preds, 'rmse': rmse, 'mape': mape, 'model_info': {'order': order}}
-                all_models['ARIMA(自预测)'] = {'preds': preds, 'rmse': rmse, 'mape': mape, 'params': f'({order[0]},{order[1]},{order[2]})'}
+                candidates['ARIMA'] = {'preds': preds, 'rmse': rmse, 'mape': mape, 'model_info': {'order': order}}
+                all_models['ARIMA'] = {'preds': preds, 'rmse': rmse, 'mape': mape, 'params': f'({order[0]},{order[1]},{order[2]})'}
             except Exception as e:
                 print(f"ARIMA 模型失败: {e}")
             
@@ -405,7 +405,7 @@ def select_best_model(sku_combined_class, history, horizon):
                     'mape': metrics['mape'],
                     'params': f'α={alpha:.2f}'
                 }
-            elif model_name == 'ARIMA(自预测)':
+            elif model_name == 'ARIMA':
                 try:
                     _, order = arima_forecast(history, horizon)
                     all_models[model_name] = {
@@ -479,7 +479,7 @@ def select_best_model(sku_combined_class, history, horizon):
         elif best_name == '二次指数平滑法':
             preds, alpha = holt_exp_smoothing(train, horizon, sku_combined_class)
             model_info = {'alpha': alpha}
-        elif best_name == 'ARIMA(自预测)':
+        elif best_name == 'ARIMA':
             preds, order = arima_forecast(train, horizon)
             model_info = {'order': order}
         elif best_name == 'Holt-Winters乘法':
@@ -519,7 +519,7 @@ def forecast_future(sku_combined_class, history, horizon, best_model_name, model
     elif best_model_name == '二次指数平滑法':
         preds, _ = holt_exp_smoothing(history, horizon, sku_combined_class)
         return preds
-    elif best_model_name == 'ARIMA(自预测)':
+    elif best_model_name == 'ARIMA':
         preds, _ = arima_forecast(history, horizon)
         return preds
     elif best_model_name == 'Holt-Winters乘法':
