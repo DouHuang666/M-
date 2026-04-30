@@ -1269,7 +1269,7 @@ def demand_forecast_page():
             b_last = (alpha / (1 - alpha)) * (s1[-1] - s2[-1]) if alpha < 1 else 0
             preds = [a_last + b_last * (k+1) for k in range(horizon)]
             return preds, f"α={alpha:.2f}"
-        elif model_name == "ARIMA(自预测)":
+        elif model_name == "ARIMA":
             p = params_dict.get("p", 2)
             d = params_dict.get("d", 1)
             q = params_dict.get("q", 1)
@@ -1355,7 +1355,7 @@ def demand_forecast_page():
                 "SKU": sku,
                 "品名": product_name,
                 "ABC-XYZ分类": combined_class,
-                "最优模型": "ARIMA" if best_model_name == "ARIMA(自预测)" else best_model_name,
+                "最优模型": "ARIMA" if best_model_name == "ARIMA" else best_model_name,
                 "验证集RMSE(件)": f"{best_rmse:.1f}",
                 "预测需求量": f"{total_pred:.1f}"
             })
@@ -1389,7 +1389,7 @@ def demand_forecast_page():
                     if combined_class_for_manual in ['AX', 'AY', 'BX']:
                         available_models = ["二次指数平滑法", "简单移动平均法", "二次移动平均法", "加权移动平均法"]
                     else:
-                        available_models = ["二次指数平滑法", "ARIMA(自预测)", "Holt-Winters乘法", "Holt-Winters加法", "简单移动平均法", "二次移动平均法", "加权移动平均法"]
+                        available_models = ["二次指数平滑法", "ARIMA", "Holt-Winters乘法", "Holt-Winters加法", "简单移动平均法", "二次移动平均法", "加权移动平均法"]
                     selected_model = st.selectbox(
                         "选择预测模型",
                         available_models,
@@ -1401,7 +1401,7 @@ def demand_forecast_page():
                         alpha = st.slider("平滑系数 α", 0.05, 0.95, 0.50, 0.05, key="manual_alpha_sidebar", help="α越大，近期数据权重越高。")
                         params_dict["alpha"] = alpha
                         manual_model_desc = f"α={alpha:.2f}"
-                    elif selected_model == "ARIMA(自预测)":
+                    elif selected_model == "ARIMA":
                         p = st.slider("自回归阶数 p", 0, 3, 2, 1, key="manual_p_sidebar", help="使用最近p个历史值预测。")
                         d = st.slider("差分阶数 d", 0, 2, 1, 1, key="manual_d_sidebar", help="使序列平稳所需的差分次数。")
                         q = st.slider("移动平均阶数 q", 0, 3, 1, 1, key="manual_q_sidebar", help="预测误差的影响周期。")
@@ -1460,12 +1460,12 @@ def demand_forecast_page():
         with st.expander("模型对比", expanded=False):
             compare_data = []
             for name, info in all_models.items():
-                display_name = "ARIMA模型" if name == "ARIMA(自预测)" else name
+                display_name = "ARIMA模型" if name == "ARIMA" else name
                 compare_data.append({"预测模型": display_name, "参数": info['params'], "RMSE (件)": f"{info['rmse']:.1f}", "MAPE (%)": f"{info['mape']:.1f}"})
             compare_df = pd.DataFrame(compare_data)
             table_html = render_dataframe_as_custom_table(compare_df, add_index=False)
             st.markdown(table_html, unsafe_allow_html=True)
-            best_display_name = "ARIMA模型" if best_model_name == "ARIMA(自预测)" else best_model_name
+            best_display_name = "ARIMA模型" if best_model_name == "ARIMA" else best_model_name
             st.success(f"系统最优模型：{best_display_name} (滚动验证平均RMSE={val_rmse:.1f}件, MAPE={val_mape:.1f}%)")
 
         st.markdown('<hr style="margin: 1rem 0;">', unsafe_allow_html=True)
