@@ -616,24 +616,14 @@ def render_top_bar():
         spacer, btn_col = st.columns([1, 1])
         with btn_col:
             with st.popover("智能助手", use_container_width=True):
-                # ------------------ 优先从 secrets 读取 API Key ------------------
-                if st.session_state.deepseek_api_key is None:
-                    try:
-                        secret_key = st.secrets.get("DEEPSEEK_API_KEY")
-                        if secret_key and isinstance(secret_key, str) and secret_key.startswith("sk-"):
-                            st.session_state.deepseek_api_key = secret_key
-                    except Exception:
-                        pass
-
                 if st.session_state.deepseek_api_key is None:
                     st.markdown("### <i class='fas fa-key'></i> 首次使用需配置 DeepSeek API Key", unsafe_allow_html=True)
                     st.caption("请填入您的 DeepSeek API Key（可从 platform.deepseek.com 获取）")
-                    st.caption("💡 提示：在 Streamlit Cloud 上，您可以在「Settings → Secrets」中永久设置 `DEEPSEEK_API_KEY`，避免每次刷新都重新输入。")
                     api_key_input = st.text_input("API Key", type="password", key="api_key_input")
                     if st.button("保存 Key", key="save_api_key"):
                         if api_key_input.strip():
                             st.session_state.deepseek_api_key = api_key_input.strip()
-                            st.success("Key 已保存（仅本次会话有效，刷新页面后需重新输入，除非你在 Secrets 中配置）")
+                            st.success("Key 已保存，现在可以开始对话！")
                             st.rerun()
                         else:
                             st.error("请输入有效的 API Key")
@@ -1229,6 +1219,20 @@ def classification_page():
             with tab_combined:
                 combined_table = render_dataframe_as_custom_table(combined_result, add_index=True, special_columns={"ABC-XYZ分类": "capsule_class"})
                 st.markdown(combined_table, unsafe_allow_html=True)
+
+            # ==================== 新增：静默预加载需求预测缓存 ====================
+            # 在分类成功且数据完整后，自动预热所有 SKU 的需求预测结果
+            horizon = st.session_state.common_params["forecast_horizon"]
+            # 根据所有 SKU 的列表和 horizon 生成缓存标志，避免重复预热
+            sku_list_sorted = sorted(st.session_state.inventory_data["SKU"].tolist())
+            cache_flag_key = f"preheated_{hashlib.md5(str(sku_list_sorted).encode()).hexdigest()}_{horizon}"
+            if st.session_state.get(cache_flag_key) is None:
+                # 静默预热，无 UI 提示
+                for sku in sku_list_sorted:
+                    # 调用 get_forecast_result 会自动将结果存入 st.session_state.forecast_cache
+                    get_forecast_result(sku, horizon)
+                st.session_state[cache_flag_key] = True
+            # ================================================================
                 
         except Exception as e:
             st.error(f"计算分类时出错: {e}。请检查数据格式是否正确。")
@@ -1269,7 +1273,7 @@ def demand_forecast_page():
             b_last = (alpha / (1 - alpha)) * (s1[-1] - s2[-1]) if alpha < 1 else 0
             preds = [a_last + b_last * (k+1) for k in range(horizon)]
             return preds, f"α={alpha:.2f}"
-        elif model_name == "ARIMA":
+        elif model_name == "ARIMA(自预测)":
             p = params_dict.get("p", 2)
             d = params_dict.get("d", 1)
             q = params_dict.get("q", 1)
@@ -1355,7 +1359,7 @@ def demand_forecast_page():
                 "SKU": sku,
                 "品名": product_name,
                 "ABC-XYZ分类": combined_class,
-                "最优模型": "ARIMA" if best_model_name == "ARIMA" else best_model_name,
+                "最优模型": "ARIMA" if best_model_name == "ARIMA(自预测)" else best_model_name,
                 "验证集RMSE(件)": f"{best_rmse:.1f}",
                 "预测需求量": f"{total_pred:.1f}"
             })
@@ -1389,7 +1393,7 @@ def demand_forecast_page():
                     if combined_class_for_manual in ['AX', 'AY', 'BX']:
                         available_models = ["二次指数平滑法", "简单移动平均法", "二次移动平均法", "加权移动平均法"]
                     else:
-                        available_models = ["二次指数平滑法", "ARIMA", "Holt-Winters乘法", "Holt-Winters加法", "简单移动平均法", "二次移动平均法", "加权移动平均法"]
+                        available_models = ["二次指数平滑法", "ARIMA(自预测)", "Holt-Winters乘法", "Holt-Winters加法", "简单移动平均法", "二次移动平均法", "加权移动平均法"]
                     selected_model = st.selectbox(
                         "选择预测模型",
                         available_models,
@@ -1401,7 +1405,7 @@ def demand_forecast_page():
                         alpha = st.slider("平滑系数 α", 0.05, 0.95, 0.50, 0.05, key="manual_alpha_sidebar", help="α越大，近期数据权重越高。")
                         params_dict["alpha"] = alpha
                         manual_model_desc = f"α={alpha:.2f}"
-                    elif selected_model == "ARIMA":
+                    elif selected_model == "ARIMA(自预测)":
                         p = st.slider("自回归阶数 p", 0, 3, 2, 1, key="manual_p_sidebar", help="使用最近p个历史值预测。")
                         d = st.slider("差分阶数 d", 0, 2, 1, 1, key="manual_d_sidebar", help="使序列平稳所需的差分次数。")
                         q = st.slider("移动平均阶数 q", 0, 3, 1, 1, key="manual_q_sidebar", help="预测误差的影响周期。")
@@ -1460,12 +1464,12 @@ def demand_forecast_page():
         with st.expander("模型对比", expanded=False):
             compare_data = []
             for name, info in all_models.items():
-                display_name = "ARIMA模型" if name == "ARIMA" else name
+                display_name = "ARIMA模型" if name == "ARIMA(自预测)" else name
                 compare_data.append({"预测模型": display_name, "参数": info['params'], "RMSE (件)": f"{info['rmse']:.1f}", "MAPE (%)": f"{info['mape']:.1f}"})
             compare_df = pd.DataFrame(compare_data)
             table_html = render_dataframe_as_custom_table(compare_df, add_index=False)
             st.markdown(table_html, unsafe_allow_html=True)
-            best_display_name = "ARIMA模型" if best_model_name == "ARIMA" else best_model_name
+            best_display_name = "ARIMA模型" if best_model_name == "ARIMA(自预测)" else best_model_name
             st.success(f"系统最优模型：{best_display_name} (滚动验证平均RMSE={val_rmse:.1f}件, MAPE={val_mape:.1f}%)")
 
         st.markdown('<hr style="margin: 1rem 0;">', unsafe_allow_html=True)
