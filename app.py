@@ -544,23 +544,29 @@ def get_history_hash(sku):
     hist_str = json.dumps(hist)
     return hashlib.md5(hist_str.encode()).hexdigest()
 
-def get_forecast_cache_key(sku, horizon):
+# 修改1：缓存键加入 combined_class
+def get_forecast_cache_key(sku, horizon, combined_class):
     hist_hash = get_history_hash(sku)
-    return f"{sku}_{horizon}_{hist_hash}"
+    return f"{sku}_{horizon}_{combined_class}_{hist_hash}"
 
 def get_forecast_result(sku, horizon):
     if "forecast_cache" not in st.session_state:
         st.session_state.forecast_cache = {}
     cache = st.session_state.forecast_cache
-    key = get_forecast_cache_key(sku, horizon)
-    if key in cache:
-        return cache[key]
+
+    # 获取当前分类
     classification_df = get_classification_df()
     sku_class_row = classification_df[classification_df["SKU"] == sku]
     if sku_class_row.empty:
         combined_class = "CX"
     else:
         combined_class = sku_class_row["ABC-XYZ分类"].iloc[0]
+
+    # 修改2：使用带分类的缓存键
+    key = get_forecast_cache_key(sku, horizon, combined_class)
+    if key in cache:
+        return cache[key]
+
     history = st.session_state.history_data[sku].dropna().tolist()
     if len(history) < 24:
         best_model_name = "简单移动平均法"
@@ -572,6 +578,7 @@ def get_forecast_result(sku, horizon):
     else:
         best_model_name, _, val_rmse, val_mape, model_info, all_models = select_best_model(combined_class, history, horizon)
         future_preds = forecast_future(combined_class, history, horizon, best_model_name, model_info)
+
     result = (best_model_name, model_info, future_preds, val_rmse, val_mape, all_models)
     cache[key] = result
     return result
@@ -1133,7 +1140,9 @@ def classification_page():
                             else:
                                 st.session_state.abc_ratio_a = new_a
                                 st.session_state.abc_ratio_b = new_b
-                                clear_all_caches()
+                                # 修改3：只清除分类缓存，保留预测缓存
+                                if "classification_df" in st.session_state:
+                                    del st.session_state.classification_df
                                 st.rerun()
                     c_ratio = 1 - st.session_state.abc_ratio_a - st.session_state.abc_ratio_b
                     st.markdown(f'<span style="font-size: 14px;">C 类金额占比：{c_ratio*100:.1f}%（调整后自动重新分类）</span>', unsafe_allow_html=True)
